@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Práctica 2.1 - Módulo de Autenticación Seguro</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f6f9; display: flex; justify-content: center; padding-top: 40px; }
+    .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 380px; }
+    h2, h3 { text-align: center; color: #333; margin-top: 10px; }
+    input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+    button:hover { background: #0056b3; }
+    .btn-logout { background: #dc3545; }
+    .btn-logout:hover { background: #bd2130; }
+    .error { color: red; font-size: 0.9em; margin-top: 10px; text-align: center; }
+    .success { color: green; font-size: 0.9em; margin-top: 10px; text-align: center; }
+    .hidden { display: none !important; }
+    img { display: block; margin: 10px auto; max-width: 180px; }
+    .step-indicator { font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; color: #007bff; font-weight: bold; text-align: center; margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <!-- PANTALLA DE AUTENTICACIÓN -->
+  <div id="auth-container">
+    <h2>Módulo de Autenticación</h2>
+
+    <!-- ETAPA 1: REGISTRO DE USUARIO -->
+    <div id="section-register">
+      <div class="step-indicator">Paso 1 de 3</div>
+      <h3>Registro de Usuario</h3>
+      <input type="email" id="reg-email" placeholder="Correo (ej: usuario@gmail.com)" />
+      <input type="password" id="reg-pass" placeholder="Contraseña segura" />
+      <button onclick="register()">Registrar Cuenta y Generar 2FA</button>
+      <div id="reg-msg"></div>
+
+      <div id="qr-container" class="hidden">
+        <p style="font-size: 0.85em; text-align: center; margin-top: 15px;">
+          <strong>¡Registro Exitoso!</strong><br>
+          Escanea este código QR con tu app 2FA (Google Authenticator) y luego presiona Siguiente:
+        </p>
+        <img id="qr-img" src="" alt="QR 2FA" />
+        <button onclick="goToLogin()" style="background:#28a745;">Ir al Inicio de Sesión ➔</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 2: INICIO DE SESIÓN -->
+    <div id="section-login" class="hidden">
+      <div class="step-indicator">Paso 2 de 3</div>
+      <h3>Inicio de Sesión</h3>
+      
+      <!-- Paso 2A: Credenciales -->
+      <div id="login-step-1">
+        <input type="email" id="login-email" placeholder="Correo registrado" />
+        <input type="password" id="login-pass" placeholder="Contraseña" />
+        <button onclick="loginStep1()">Validar Credenciales</button>
+      </div>
+
+      <!-- Paso 2B: MFA / 2FA -->
+      <div id="login-step-2" class="hidden">
+        <p style="font-size:0.9em; color:#555; text-align:center;">
+          Credenciales válidas.<br>Ingresa el código de 6 dígitos de tu app 2FA:
+        </p>
+        <input type="text" id="login-mfa" placeholder="000000" maxlength="6" style="text-align:center; font-size: 1.2em; letter-spacing: 4px;" />
+        <button onclick="loginStep2()">Verificar Código y Entrar</button>
+      </div>
+
+      <div id="login-msg"></div>
+    </div>
+  </div>
+
+  <!-- PANTALLA DE INICIO / DASHBOARD (OCULTA POR DEFECTO) -->
+  <div id="dashboard-container" class="hidden">
+    <h2>🎉 ¡Bienvenido al Sistema!</h2>
+    <p style="text-align: center; color: #555;">Has iniciado sesión de manera segura utilizando doble factor de autenticación.</p>
+    
+    <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
+      <span style="font-size: 0.85em; color: #666;">Usuario autenticado:</span><br>
+      <strong id="user-display-email" style="color: #333; font-size: 1.1em;">---</strong>
+    </div>
+
+    <button onclick="logout()" class="btn-logout">Cerrar Sesión</button>
+  </div>
+</div>
+
+<script>
+  let registeredEmail = '';
+  let activeEmail = '';
+
+  // 1. REGISTRAR USUARIO
+  async function register() {
+    const email = document.getElementById('reg-email').value;
+    const password = document.getElementById('reg-pass').value;
+    const msg = document.getElementById('reg-msg');
+    msg.className = ''; msg.innerText = '';
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        registeredEmail = email;
+        msg.className = 'success';
+        msg.innerText = data.message;
+        document.getElementById('qr-img').src = data.qrCode;
+        document.getElementById('qr-container').classList.remove('hidden');
+      } else {
+        msg.className = 'error';
+        msg.innerText = data.error;
+      }
+    } catch (err) {
+      msg.className = 'error';
+      msg.innerText = 'Error al conectar con el servidor.';
+    }
+  }
+
+  // NAVEGAR DEL REGISTRO AL LOGIN
+  function goToLogin() {
+    document.getElementById('section-register').classList.add('hidden');
+    document.getElementById('section-login').classList.remove('hidden');
+    document.getElementById('login-email').value = registeredEmail;
+  }
+
+  // 2. PASO 1 DEL LOGIN (CORREO Y CONTRASEÑA)
+  async function loginStep1() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-pass').value;
+    const msg = document.getElementById('login-msg');
+    msg.className = ''; msg.innerText = '';
+
+    try {
+      const res = await fetch('/api/login/step1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        activeEmail = email;
+        document.getElementById('login-step-1').classList.add('hidden');
+        document.getElementById('login-step-2').classList.remove('hidden');
+        msg.className = 'success';
+        msg.innerText = data.message;
+      } else {
+        msg.className = 'error';
+        msg.innerText = data.error;
+      }
+    } catch (err) {
+      msg.className = 'error';
+      msg.innerText = 'Error al conectar con el servidor.';
+    }
+  }
+
+  // 3. PASO 2 DEL LOGIN (VERIFICACIÓN MFA)
+  async function loginStep2() {
+    const mfaCode = document.getElementById('login-mfa').value;
+    const msg = document.getElementById('login-msg');
+    msg.className = ''; msg.innerText = '';
+
+    try {
+      const res = await fetch('/api/login/step2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: activeEmail, mfaCode })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        // Ocultar autenticación y mostrar Inicio (Dashboard)
+        document.getElementById('auth-container').classList.add('hidden');
+        document.getElementById('dashboard-container').classList.remove('hidden');
+        document.getElementById('user-display-email').innerText = activeEmail;
+      } else {
+        msg.className = 'error';
+        msg.innerText = data.error;
+      }
+    } catch (err) {
+      msg.className = 'error';
+      msg.innerText = 'Error al conectar con el servidor.';
+    }
+  }
+
+  // 4. CERRAR SESIÓN
+  function logout() {
+    // Recargar la página limpia para volver al inicio del formulario sin estados residuales
+    window.location.reload();
+  }
+</script>
+</body>
+</html>
