@@ -1,7 +1,4 @@
 const express = require('express');
-const https = require('https');
-const http = require('http');
-const fs = require('fs');
 const dns = require('dns').promises;
 const bcrypt = require('bcryptjs');
 const speakeasy = require('speakeasy');
@@ -129,24 +126,8 @@ app.post('/api/login/step2', (req, res) => {
   res.json({ message: 'Acceso exitoso concedido al sistema.' });
 });
 
-// --- CONFIGURACIÓN SSL / HTTPS ---
-const sslOptions = {
-  key: fs.readFileSync(path.join(__dirname, 'certificados', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certificados', 'cert.pem'))
-};
-
-const HTTPS_PORT = 3443;
-const HTTP_PORT = 3000;
-
-// Iniciar servidor seguro HTTPS
-https.createServer(sslOptions, app).listen(HTTPS_PORT, () => {
-  console.log(`Servidor SEGURO (HTTPS) ejecutándose en: https://localhost:${HTTPS_PORT}`);
-});
-
-// Servidor HTTP auxiliar que redirige automáticamente a HTTPS
-http.createServer((req, res) => {
-  res.writeHead(301, { "Location": `https://localhost:${HTTPS_PORT}${req.url}` });
-  res.end();
-}).listen(HTTP_PORT, () => {
-  console.log(`↪Redirección HTTP activa en: http://localhost:${HTTP_PORT} -> HTTPS`);
+// ARRANQUE DINÁMICO PARA RENDER
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor ejecutándose en el puerto ${PORT}`);
 });
